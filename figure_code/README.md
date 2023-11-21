@@ -1,6 +1,6 @@
 # Figure code
 
-Due to Github file size limit constraints, data used in the Rmd are hosted on Zenodo (https://zenodo.org/records/10175693). 
+Due to Github file size limit constraints, data used in the Rmd are hosted on Zenodo as data.zip: https://zenodo.org/records/10175693
 
 > [!Note]
 To run Rmd code, first extract data.zip. Extracted data folder and Rmd must be in the same directory for the Rmd to run. 
