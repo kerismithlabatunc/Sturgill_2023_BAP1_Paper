@@ -5,8 +5,8 @@ Please note that this is not intended to run on new data and is instead intended
 software and parameters can be used independently without needing to use the Nextflow implementation. The pipeline can be reproduced by creating a Nextflow 
 config for your given local computing environment and by editing the somatic_variant_pipeline.nf paths to reflect your local system directory.
 
-The Singularity container containing the software versions used in the pipeline are hosted on Zenodo due to 
-Github file size limit constraints. Bed files are included here and on Zenodo.
+The Singularity container containing the software versions used in the pipeline are hosted on Zenodo (https://zenodo.org/records/10175693) due to 
+Github file size limit constraints. BED files are included here and on Zenodo.
 
 # Acknowledgements
 
