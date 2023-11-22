@@ -1,7 +1,7 @@
 ### Expanded detection of *BAP1* alterations in cancer and tumor type-specific expression score comparison 
 
 Code for the project is available in the subdirectories here. \
-Code is also available along with large file fize data on [Zenodo](https://zenodo.org/records/10180501)
+Code is also available along with large file fize data on [Zenodo](https://zenodo.org/records/10180501).
 
 ## Updates
 * 2023-11-21 The preprint manuscript is now available on [bioRxiv](https://www.biorxiv.org/content/10.1101/2023.11.21.568094v1) in PDF format.
