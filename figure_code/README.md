@@ -1,6 +1,7 @@
 # Figure code
 
-Due to Github file size limit constraints, data used in the Rmd are hosted on Zenodo as **data.zip**: https://zenodo.org/records/10180501
+The figure code is uploaded here as an R markdown (Rmd) file and as a simplified R script with the Rmd text commented out. \
+Due to Github file size limit constraints, data used in the Rmd are hosted on [Zenodo](https://zenodo.org/records/10180501) as **data.zip**.
 
 > [!Note]
 To run Rmd code, first extract data.zip. Extracted data folder and Rmd must be in the same directory for the Rmd to run. 
