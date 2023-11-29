@@ -1,0 +1,2004 @@
+---
+title: "figure_code"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+Please note that some plots won't display properly from the R markdown -- especially ComplexHeatmap plots. Generating the plots outside of the R markdown environment should solve most visual issues. Plots were generated in R and finalized in Adobe Illustrator 2021.
+
+## Figure 1 - Mutation variant calling
+
+Load the variant and per-sample annotation data.
+
+
+```{r, echo = TRUE}
+variants_simple <- read.delim("data/table_s2a.txt")
+mc3_simple <- read.delim("data/table_s2b.txt")
+variants_final <- read.delim("data/table_s2c.txt")
+mc3_final <- read.delim("data/table_s2d.txt")
+
+cohort_anno <- read.delim("data/table_s3a.txt")
+sample_anno <- read.delim("data/table_s3b.txt")
+
+# TCGA long and short cancer type IDs
+tcga_projects <- unique(sample_anno$Cohort)
+tcga_names <- c()
+for (i in tcga_projects) {
+  tcga_names <- c(tcga_names, strsplit(i, "-")[[1]][2])
+}
+
+# Standard cancer type colors for plots
+tcga_colors <- read.delim("data/tcga_colors.txt")
+```
+
+
+The first numbers referenced in the results text are: \
+
+> Out of 10,414 samples and 33 cancer types, a total of 1329 non-synonymous, non-intronic variants were detected in 981 individuals across the two updated hg38-aligned approaches with simple caller quality filtering (FILTER flag == “PASS”), including 14 indels >=40bp in length (Table S2A). 
+
+
+All variants here are nonsynonymous, non-intronic variants which have passed individual variant caller quality checks (FILTER flag == "PASS" or GDC_FILTER == ""). 
+
+
+```{r, echo = TRUE}
+num_simple_variants <- nrow(variants_simple)
+num_simple_mutants <- length(unique(variants_simple$SAMPLE))
+num_simple_40bpindels <- sum(variants_simple$length >= 40)
+
+cat(sprintf("# nonsynonymous, non-intronic variants passing simple filtering: %s",
+        num_simple_variants), "\n")
+cat(sprintf("# mutant samples passing simple filtering: %s",
+        num_simple_mutants), "\n")
+cat(sprintf("# indels >=40bp passing simple filtering: %s",
+        num_simple_40bpindels), "\n")
+```
+
+
+We then compare to the historical MC3 variant calls with simple filtering: \
+
+
+> This earlier pipeline resulted in the detection of 243 variants from 217 individuals which similarly passed simple call quality filtering, none of which were >=40bp (Table S2B). 
+
+
+```{r, echo = TRUE}
+num_simple_mc3 <- nrow(mc3_simple)
+num_simple_mc3_mutants <- length(unique(mc3_simple$SAMPLE))
+num_simple_mc3_40bpindels <- sum(mc3_simple$length >= 40)
+
+cat(sprintf("# MC3 nonsynonymous, non-intronic variants passing simple filtering: %s",
+        num_simple_mc3), "\n")
+cat(sprintf("# MC3 mutant samples passing simple filtering: %s",
+        num_simple_mc3_mutants), "\n")
+cat(sprintf("# MC3 indels >=40bp passing simple filtering: %s",
+        num_simple_mc3_40bpindels), "\n")
+```
+
+
+Next we performed additional filtering to identify impactful variant calls: \
+
+
+> Following further filtering and manual review of read support to identify high-quality mutation calls, we detected a final total of 130 variants for 111 BAP1-mutant samples across all TCGA cancer types, including 7 larger indels >=40bp that were not previously detected (Figure 1A, Supplemental Figure S1, and Supplemental Table S2C).     
+
+
+```{r, echo = TRUE}
+num_final_variants <- nrow(variants_final)
+num_final_mutants <- length(unique(variants_final$SAMPLE))
+num_final_40bpindels <- sum(variants_final$length >= 40)
+
+cat(sprintf("# nonsynonymous, non-intronic variants passing simple filtering: %s",
+        num_final_variants), "\n")
+cat(sprintf("# mutant samples passing simple filtering: %s",
+        num_final_mutants), "\n")
+cat(sprintf("# indels >=40bp passing simple filtering: %s",
+        num_final_40bpindels), "\n")
+```
+
+
+Comparing again to the historical MC3 variant calls, filtered in the same way:
+
+
+```{r, echo = TRUE}
+num_final_mc3 <- nrow(mc3_final)
+num_final_mc3_mutants <- length(unique(mc3_final$SAMPLE))
+num_final_mc3_40bpindels <- sum(mc3_final$length >= 40)
+
+cat(sprintf("# nonsynonymous, non-intronic variants passing simple filtering: %s",
+        num_final_mc3), "\n")
+cat(sprintf("# mutant samples passing simple filtering: %s",
+        num_final_mc3_mutants), "\n")
+cat(sprintf("# indels >=40bp passing simple filtering: %s",
+        num_final_mc3_40bpindels), "\n")
+```
+
+
+We want to have a reasonable idea of whether there are shared variant calls across
+the new and historical data. Although there is a complication from hg19 vs. hg38
+alignment, we can say that a variant is shared if both the variant allele and the
+sample ID are identical.
+
+
+> When compared with similar filtering of the MC3 dataset, 39 (30%) were new calls and the remaining 91 were concordant (Figure 1B). 
+
+
+```{r, echo = TRUE}
+shared <- c()
+shared_rownum <- c()
+
+for (i in 1:nrow(variants_final)) {
+  compare_id <- variants_final$SAMPLE[i]
+  if (compare_id %in% mc3_final$SAMPLE) {
+    if (variants_final$variant_allele[i] %in% 
+        mc3_final$variant_allele[mc3_final$SAMPLE == compare_id]) {
+      shared <- c(shared, compare_id)
+      shared_rownum <- c(shared_rownum, i)
+    }
+  }
+}
+
+num_shared_variants <- length(shared)
+num_new_unique <- num_final_variants - num_shared_variants
+percent_new_unique <- paste0((num_new_unique / num_final_variants) * 100, "%")
+
+cat(sprintf("# new variant calls: %s (%s)",
+        num_new_unique, percent_new_unique), "\n")
+cat(sprintf("# shared variant calls between new and MC3: %s",
+        num_shared_variants), "\n")
+```
+
+
+We can also pull up the details for the 1 variant in MC3 that was not detected (or detected differently) in the new variant call dataset:
+
+
+> With the exception of one variant, a 5bp deletion in KIRP sample TCGA-2Z-A9JD, all MC3 variants and mutant samples were captured in the new approach (Supplemental Tables S2C-S2D). For that sample, two single-nucleotide variants (deletion and missense) were detected instead from the new calls, suggesting a potential difference in hg19 versus hg38 alignment and downstream variant calling.
+
+
+```{r, echo = TRUE}
+data.frame(rbind(mc3_final[mc3_final$SAMPLE == "TCGA-2Z-A9JD", 
+                           c("Start_Position", "End_Position", 
+                             "variant_allele", "Variant_Classification")],
+                variants_final[variants_final$SAMPLE == "TCGA-2Z-A9JD", 
+                               c("Start_Position", "End_Position", 
+                                 "variant_allele", "Variant_Classification")]),
+           row.names = c("MC3_variant", "New_variant1", "New_variant2"))
+
+```
+
+
+### Figure 1A
+This figure was made with screen captures from Integrative Genomics Viewer (IGV) views of
+the BAP1 gene locus near exon 5 for the indicated BAM slice files.
+Image was finalized in Adobe Illustrator 2021.
+
+
+### Supplemental Figure S1
+This is a supplemental supporting figure for figure 1. Image was finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE}
+boxplot(mc3_final$length, 
+        variants_final$length, 
+        outline = FALSE, 
+        ylim = c(0, max(variants_final$length)), 
+        names = c("TCGA MC3", "New"), 
+        ylab = "Variant length (bp)")
+
+points(jitter(rep(1, nrow(mc3_final))),
+       mc3_final$length,
+       pch = 16)
+
+points(jitter(rep(2, nrow(variants_final))),
+       variants_final$length,
+       pch = 16)
+
+abline(h = 40, lty = "dotted", col = "darkgrey") #40bp threshold
+```
+
+
+### Figure 1B
+Here we plot % representation of variant classifications among mutatations ordered from highest to lowest, with numbers above their respective bars. If there were no variants of a particular classification, the classification was not included. Image below was finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE}
+new_ids <- variants_final$SAMPLE[-shared_rownum]
+
+variant_df <- table(variants_final$Variant_Classification, variants_final$SAMPLE %in% shared)
+colnames(variant_df) <- c("New calls", "TCGA MC3 calls")
+
+variant_df <- variant_df[order(rowSums(variant_df), decreasing = TRUE),
+                         c("TCGA MC3 calls", "New calls")]
+
+rownames(variant_df) <- gsub("_", " ", rownames(variant_df))
+
+num_variants <- length(new_ids) + length(shared)
+
+# Plotting % representation of variants split by old/shared vs new-unique calls
+# Numbers indicated on top
+par(mar = c(8, 4, 4, 2))
+class_barplot <- barplot(t(variant_df) * (100/num_variants), 
+                         las = 2, 
+                         cex.names = 0.7,
+                         ylab = "% of mutations",
+                         col = c("grey", "steelblue"),
+                         xlim = c(0, 10), ylim = c(0, 35),
+                         width = rep(0.5, 10))
+
+plot_labs <- paste0("n=", colSums(t(variant_df)))
+text(x = class_barplot, y = sort(colSums(t(variant_df) * (100/num_variants)), 
+                                 decreasing = TRUE),
+     label = plot_labs,
+     pos = 3, cex = 0.8, col = "black", offset = 0.7)
+```
+
+
+From the text:
+> The majority of BAP1 variants were deleterious nonsense and frameshift events (53.8%, 70/130), followed by missense mutations (27.7%, 36/130, Figure 1B and Supplemental Table S2C). 
+
+
+```{r, echo = TRUE}
+num_nonsense_frameshift <- sum(variants_final$Variant_Classification %in% 
+                                 c("Nonsense_Mutation", "Frame_Shift_Del",
+                                   "Frame_Shift_Ins"))
+percent_nonsense_frameshift <- round((num_nonsense_frameshift / num_final_variants) * 100, 1)
+
+num_missense <- sum(variants_final$Variant_Classification == "Missense_Mutation")
+percent_missense <- round((num_missense / num_final_variants) * 100, 1)
+
+cat(sprintf("# nonsense and frameshift variants: %s (%s)", 
+            num_nonsense_frameshift, paste0(percent_nonsense_frameshift, "%")), "\n")
+cat(sprintf("# missense variants: %s (%s)",
+            num_missense, paste0(percent_missense, "%")), "\n")
+```
+
+
+> Of the cancer types represented in TCGA, 17/33 (51.5%) have at least one BAP1 mutant sample (Figure 1C). Only three tumor types had >5% mutation frequency: uveal melanoma (UVM), malignant mesothelioma (MESO), and cholangiocarcinoma (CHOL) (Supplemental Table S3A). 
+
+
+```{r, echo = TRUE}
+num_mutant_cohorts <- length(unique(variants_final$Cancer_Type))
+percent_mutant_cohorts <- round(num_mutant_cohorts / length(tcga_projects) * 100, 1)
+
+types_5freq <- cohort_anno$Cohort[(cohort_anno$Mutation.only + cohort_anno$Mutation.Copynumber) /
+                         cohort_anno$Cohort.size > 0.05]
+
+cat(sprintf("# cancer types with mutant samples: %s (%s)", 
+            num_mutant_cohorts, paste0(percent_mutant_cohorts, "%")), "\n")
+cat(sprintf("Cancer types with >5 percent mutation frequency: %s",
+            paste(types_5freq, collapse = ", ")), "\n")
+
+
+```
+
+
+### Figure 1C
+Here we plot % mutant samples per cohort ordered from highest to lowest, with numbers above their respective bars. If there were no mutations, the cohort was not included. Image below was finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE}
+num_mutant <- c()
+percent_mutant <- c()
+
+for (i in tcga_projects) {
+  n_mut <- sum(grepl("mutation", sample_anno$alteration_type[sample_anno$Cohort == i]),
+               na.rm = TRUE)
+  n_cohort <- sum(sample_anno$Cohort == i)
+  
+  num_mutant <- c(num_mutant, n_mut)
+  
+  percent_mutant <- c(percent_mutant, (n_mut/n_cohort)*100)
+}
+
+names(num_mutant) <- tcga_names
+names(percent_mutant) <- tcga_names
+
+# Remove cancer types which have 0 mutant samples
+num_mutant <- num_mutant[num_mutant != 0]
+percent_mutant <- percent_mutant[percent_mutant != 0]
+
+tcga_col <- tcga_colors$Hex.Colors
+names(tcga_col) <- tcga_colors$Study.Abbreviation
+par(mar = c(8, 4, 4, 2))
+mut_barplot <- barplot(sort(percent_mutant, decreasing = TRUE),
+                       las = 2, 
+                       cex.names = 0.7, 
+                       col = tcga_col[names(sort(percent_mutant, decreasing = TRUE))], 
+                       names.arg = names(sort(percent_mutant, decreasing = TRUE)),
+                       ylab = "% cohort with BAP1 mutation", 
+                       ylim = c(0, 25))
+
+plot_labs <- paste0("n=", num_mutant[order(percent_mutant, decreasing = TRUE)][1:17])
+text(x = mut_barplot, 
+     y = sort(percent_mutant, decreasing = TRUE)[1:17], 
+     label = plot_labs, 
+     pos = 3, 
+     cex = 0.8)
+```
+
+
+Next from the text:
+
+> We did not identify strong hot spot loci and variants were broadly distributed across the length of the gene with no significant difference in protein-level domain representation for missense versus other mutation types (Fisher’s exact test, two-sided p=0.42)  (Figure 1D and Supplemental Table S2C). 
+
+
+```{r, echo = TRUE}
+table(variants_final$Domain, variants_final$Mutation_Type)
+
+variants_fisher <- fisher.test(table(variants_final$Domain, variants_final$Mutation_Type))
+cat(sprintf("Two-sided Fisher's exact test p=%s",
+            round(variants_fisher$p.value, 2)))
+```
+
+
+> We observed 71/130 (54.6%) variants occurred at an annotated functional domain with 37/130 (28.5%) occurring at the catalytic UCH domain (Figure 1D and Supplemental Table S2C).   
+
+
+```{r, echo = TRUE}
+num_functional <- sum(variants_final$Domain != "Other")
+percent_functional <- paste0(round((num_functional / num_final_variants) * 100, 1), "%")
+
+num_uch <- sum(variants_final$Domain %in% c("UCH", "UCH+BARD1"))
+percent_uch <- paste0(round((num_uch / num_final_variants) * 100, 1), "%")
+
+cat(sprintf("# variants occurring at functional domain: %s (%s)", 
+            num_functional, percent_functional), "\n")
+
+cat(sprintf("# variants occurring at UCH domain: %s (%s)", 
+            num_uch, percent_uch), "\n")
+```
+
+
+### Figure 1D
+
+This figure was made outside of R by exporting the 130 variant calls into a readable format for the cBioPortal MutationMapper (https://www.cbioportal.org/mutation_mapper). Please note that GRCh38 is the reference genome to use for this dataset. Image was adapted from cBioPortal and finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE, eval = FALSE}
+cbio <- variants_final[, c("SAMPLE", "Chromosome", "Start_Position",
+                                             "End_Position", "Hugo_Symbol", "Mutation_Type",
+                                             "Reference_Allele", "variant_allele", "Cancer_Type")]
+
+colnames(cbio) <- c("Sample_ID", "Chromosome", "Start_Position",
+                                  "End_Position", "Hugo_Symbol", "Mutation_Type",
+                                  "Reference_Allele", "Variant_Allele", "Cancer_Type")
+
+# write.table(cbio, file = "cbio_import.txt", sep = "\t", row.names = FALSE, quote = FALSE)
+```
+
+
+## Figure 2 - BAP1 copy number alterations
+
+
+Here we turn to looking at the contribution of gene-level BAP1 copy number loss across TCGA.
+
+> BAP1 CN loss was observed in 1509 samples and estimated at single copy loss in 99.2% of all samples with CN loss (Table S3A-B)
+
+
+```{r, echo = TRUE}
+num_copynumber <- sum(grepl("copynumber", sample_anno$alteration_type))
+
+percent_heterozygous_loss <- paste0(round(sum(sample_anno$genelevel.copy_number == 1, na.rm = TRUE) / num_copynumber * 100, 1), "%")
+
+cat(sprintf("# of samples with copy number loss: %s", num_copynumber), "\n")
+cat(sprintf("Percent heterozygous loss of all CN loss: %s", percent_heterozygous_loss), "\n")
+```
+
+
+> Gene-level CN loss occurs frequently (>30% of samples) in KIRC, UVM, CHOL, MESO, LIHC, lung squamous cell carcinoma (LUSC), and head and neck squamous cancers (HNSC) (Figure 2A and Table S3A).  
+
+
+```{r, echo = TRUE}
+types_30freq <- cohort_anno$Cohort[(cohort_anno$Copynumber.only + 
+   cohort_anno$Mutation.Copynumber) / cohort_anno$Cohort.size > 0.3]
+
+cat(sprintf("Cancer types with >30 percent gene-level CN loss: %s",
+            paste(types_30freq, collapse = ", ")), "\n")
+```
+
+
+### Figure 2A, right
+
+Plotgardener is a highly customizable R package for generating figures, especially those featuring genomic data. The goal for this panel was to show start and stop locations for segments of BAP1 copy number loss in order to understand spatially how much of the chromosome 3p arm was lost in cases of loss. Image was finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE, message = FALSE}
+library(plotgardener)
+library(org.Hs.eg.db)
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+library(AnnotationHub)
+
+bap1_start <- 52401008
+bap1_end <- 52410008
+bap1_length <- bap1_end - bap1_start + 1
+chr3_length <- 198295559
+
+pageCreate(width = 6, height = 8, default.units = "inches")
+
+plotIdeogram(chrom = "chr3", assembly = "hg38",
+             x = 1, y = 0.5, width = 3.25, height = 0.15, 
+             just = c("left", "top"), default.units = "inches")
+
+plotText(label = "Chromosome 3",
+         fontsize = 8, fontcolor = "black", x = 4.25, y = 0.4, 
+         just = "right", default.units = "inches")
+
+plotText(label = "BAP1 locus",
+         fontsize = 8, fontcolor = "black", x = 1 + (bap1_start/chr3_length)*3.25, y = 0.1, 
+         just = "center", default.units = "inches")
+
+plotSegments(x0 = 1 + (bap1_start/chr3_length)*3.25, x1 = 1 + (bap1_end/chr3_length)*3.25, 
+             y0 = 0.25, y1 = 0.7, lwd = 2, linecolor = "red")
+
+j <- 0.75 # this is an iterator variable for positioning plot elements
+mean_seg_start_list <- c()
+
+for (i in tcga_projects[tcga_projects != "TCGA-THCA"]) {
+  loc <- as.character(na.omit(sample_anno$copy_number_segment_location[sample_anno$Cohort == i & sample_anno$genelevel.copy_number < 2]))
+  if (length(loc) > 0) {
+    mean_seg_start <- c()
+    mean_seg_end <- c()
+    for (k in loc) {
+      mean_seg_start <- c(mean_seg_start, 
+                          as.numeric(strsplit(strsplit(k, ":")[[1]][2], "-")[[1]][1]))
+      mean_seg_end <- c(mean_seg_end, 
+                        as.numeric(strsplit(strsplit(k, ":")[[1]][2], "-")[[1]][2]))
+    }
+    min_seg <- quantile(mean_seg_start, 0.25)
+    max_seg <- quantile(mean_seg_end, 0.75)
+    mean_seg_start_keep <- mean_seg_start
+    mean_seg_end_keep <- mean_seg_end
+    mean_seg_start <- mean(mean_seg_start)
+    mean_seg_start_list <- c(mean_seg_start_list, mean_seg_start)
+    mean_seg_end <- mean(mean_seg_end)
+  }
+}
+
+for (i in tcga_projects[tcga_projects != "TCGA-THCA"][order(mean_seg_start_list)]) {
+  cohort_short <- strsplit(i, "-")[[1]][2]
+  plot_name <- strsplit(i, "-")[[1]][2]
+  loc <- as.character(na.omit(sample_anno$copy_number_segment_location[sample_anno$Cohort == i & sample_anno$genelevel.copy_number < 2]))
+  if (length(loc) > 0) {
+    mean_seg_start <- c()
+    mean_seg_end <- c()
+    for (k in loc) {
+      mean_seg_start <- c(mean_seg_start, 
+                          as.numeric(strsplit(strsplit(k, ":")[[1]][2], "-")[[1]][1]))
+      mean_seg_end <- c(mean_seg_end, 
+                        as.numeric(strsplit(strsplit(k, ":")[[1]][2], "-")[[1]][2]))
+    }
+    min_seg <- quantile(mean_seg_start, 0.25)
+    max_seg <- quantile(mean_seg_end, 0.75)
+    mean_seg_start_keep <- mean_seg_start
+    mean_seg_end_keep <- mean_seg_end
+    mean_seg_start <- mean(mean_seg_start)
+    mean_seg_end <- mean(mean_seg_end)
+    plotRect(x = 1 + (mean_seg_start/chr3_length)*3.25,
+             y = j,
+             width = ((mean_seg_end - mean_seg_start)/chr3_length)*3.25,
+             height = 0.15,
+             fill = tcga_col[cohort_short],
+             just = "left")
+    plotRect(x = 1 + (mean_seg_start/chr3_length)*3.25,
+             y = j,
+             width = (1 + (mean_seg_start/chr3_length)*3.25) - (1 + (min_seg/chr3_length)*3.25),
+             height = 0.01,
+             fill = "black",
+             just = "right")
+    plotRect(x = 1 + (mean_seg_end/chr3_length)*3.25,
+             y = j,
+             width = (1+ (max_seg/chr3_length)*3.25) - (1 + (mean_seg_end/chr3_length)*3.25),
+             height = 0.01,
+             fill = "black",
+             just = "left")
+    plotCircle(x = 1 + (mean_seg_start_keep/chr3_length)*3.25,
+               y = j,
+               r = 0.025,
+               fill = "green")
+    plotCircle(x = 1 + (mean_seg_end_keep/chr3_length)*3.25,
+               y = j,
+               r = 0.025,
+               fill = "darkred")
+  }
+  plotText(label = cohort_short,
+           fontsize = 7, fontcolor = "black", x = 5, y = j, just = "left", default.units = "inches")
+  j <- j + 0.2
+}
+
+pageGuideHide()
+```
+
+
+### Figure 2A, left
+
+This is a companion barplot of frequency and number of gene-level BAP1 copy number loss. Image was finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE}
+percent_cnv <- c()
+number_cnv <- c()
+
+for (i in tcga_projects[tcga_projects != "TCGA-THCA"]) {
+  num_cnv <- sum(grepl("copynumber", sample_anno$alteration_type[sample_anno$Cohort == i]),
+                 na.rm = TRUE)
+  num_cohort <- sum(sample_anno$Cohort == i)
+  number_cnv <- c(number_cnv, num_cnv)
+  percent_cnv <- c(percent_cnv, (num_cnv / num_cohort) * 100)
+}
+
+cnv_names <- c()
+for (i in tcga_projects[tcga_projects != "TCGA-THCA"]) {
+  cnv_names <- c(cnv_names, strsplit(i, "-")[[1]][2])
+}
+
+names(percent_cnv) <- cnv_names
+names(number_cnv) <- cnv_names
+
+# Plot order to correspond with figure 2A, right
+plot_order <- c("KIRC", "LUAD", "CHOL", "HNSC", "TGCT", "ACC",
+                "PAAD", "LUSC", "KIRP", "KICH", "SKCM", "PCPG",
+                "GBM", "UVM", "CESC", "ESCA", "LGG", "UCS",
+                "LIHC", "SARC", "READ", "COAD", "BRCA", "STAD",
+                "BLCA", "OV", "PRAD", "MESO", "THYM", "DLBC", "UCEC", "LAML")
+
+cnv_barplot <- barplot(percent_cnv[plot_order], las = 2, cex.names = 0.7,
+                       col = tcga_col[plot_order], ylab = "% BAP1 copy number loss",
+                       ylim = c(0, max(percent_cnv)+40))
+
+text(x = cnv_barplot, y = percent_cnv[plot_order], 
+     label = paste0("n=",number_cnv[plot_order]), 
+     pos = 3, cex = 1, col = "black", srt = 90, offset = 1.3)
+```
+
+
+From the text:
+
+> For example, KIRC (median 58.3Mb, interquartile range IQR 32.9-80.4Mb), LUAD (median 61.0Mb, IQR 26.9-89.3Mb), and PCPG (median 51.7Mb, IQR 23.2-148.8Mb) have very large segment widths of loss (Table S3 B). In contrast, MESO (median 9.9Mb, IQR 2.1-19.1Mb), PRAD (median 17.2Mb, IQR 4.5-33.7Mb), and UCEC (median 7.7Mb, IQR 4.8-16.6Mb)  
+
+
+```{r, echo = TRUE}
+median_seg_width <- function(cohort) {
+  cohort_widths <- sample_anno$copy_number_segment_width[sample_anno$Cohort == cohort &
+                   grepl("copynumber",sample_anno$alteration_type)]
+  median_width <- median(cohort_widths, na.rm = TRUE) / 1e6
+  width_25ile <- quantile(cohort_widths, 0.25, na.rm = TRUE) / 1e6
+  width_75ile <- quantile(cohort_widths, 0.75, na.rm = TRUE) / 1e6
+  
+  cat(sprintf("%s median copy number width: %sMb (%sMb-%sMb)",
+              cohort, round(median_width, 1), round(width_25ile, 1),
+              round(width_75ile, 1)), "\n")
+}
+
+for (i in c("TCGA-KIRC", "TCGA-LUAD", "TCGA-PCPG", "TCGA-MESO", "TCGA-PRAD", "TCGA-UCEC")) {
+  median_seg_width(i)
+}
+```
+
+
+### Figure 2B
+
+Stacked barplot of % altered samples for each cancer type, sorted by highest overall % alterations. Image was finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE}
+keep_cols <- c("Cohort", "Mutation.only", "Copynumber.only",
+                              "Mutation.Copynumber", "Unaltered", "Cohort.size")
+percent_cols <- keep_cols[!(keep_cols %in% c("Cohort", "Cohort.size"))]
+altered_df <- cohort_anno[, keep_cols] 
+
+altered_df[, percent_cols] <- altered_df[, percent_cols] / altered_df$Cohort.size
+
+rownames(altered_df) <- altered_df$Cohort
+altered_df <- altered_df[, -which(colnames(altered_df) %in% c("Cohort", "Cohort.size"))]
+
+altered_df <- altered_df[, c("Copynumber.only", "Mutation.Copynumber",
+                             "Mutation.only", "Unaltered")]
+
+altered_df <- altered_df * 100
+
+barplot(t(altered_df), col = c("lightgreen", "darkgreen", "salmon", "lightgrey"), las = 2, cex.names = 0.7, ylab = "% of cohort altered")
+```
+
+
+> Combining CN and mutation data, 1561 samples from 32 tumor types were considered altered (Figure 2B and Table S3). 
+
+
+```{r, echo = TRUE}
+num_altered <- sum(sample_anno$altered_status == "altered_loss", na.rm = TRUE)
+num_altered_cohorts <- length(unique(na.omit(sample_anno$Cohort[sample_anno$altered_status == "altered_loss"])))
+
+cat(sprintf("# pan-cancer BAP1 altered samples: %s",
+            num_altered), "\n")
+cat(sprintf("# BAP1 altered cancer types: %s",
+            num_altered_cohorts), "\n")
+```
+
+
+> Alterations are predominantly copy number-driven (1509/1561, 96.7%). Mutations were less frequent and co-occuring with estimated single-copy CN loss in 3.8% (59/1561) of samples and alone in 3.3% (52/1561). 
+
+
+```{r, echo = TRUE}
+percent_altered_copynumber <- paste0(round(num_copynumber / num_altered * 100, 1), "%")
+
+num_mut_cn <- sum(sample_anno$alteration_type == "mutation+copynumber", na.rm = TRUE)
+percent_mut_cn <- paste0(round(num_mut_cn / num_altered * 100, 1), "%")
+
+num_mut <- sum(sample_anno$alteration_type == "mutation", na.rm = TRUE)
+percent_mut <- paste0(round(num_mut / num_altered * 100, 1), "%")
+
+cat(sprintf("Copy number-driven alterations: %s/%s (%s)",
+            num_copynumber, num_altered, percent_altered_copynumber), "\n")
+cat(sprintf("Mutation+copynumber alterations: %s/%s (%s)",
+            num_mut_cn, num_altered, percent_mut_cn), "\n")
+cat(sprintf("Mutation-driven alterations: %s/%s (%s)",
+            num_mut, num_altered, percent_mut), "\n")
+```
+
+
+### Figure S2
+
+Comparisons of VAF across mutation types (mutation only or mutation+copynumber) and VAF versus tumor purity. Images were finalized in Adobe Illustrator 2021.
+
+
+> Regardless of tumor purity, mean variant allele frequency is 0.53±0.22 (standard deviation) and does not differ between samples with mutations only and samples with both CN loss and mutations (two-sided Mann-Whitney U test with continuity correction p=0.29, Figure S2A). 
+
+
+```{r, echo = TRUE}
+mean_vaf <- round(median(variants_final$VAF), 2)
+sd_vaf <- round(sd(variants_final$VAF), 2)
+
+cat(sprintf("Mean VAF: %s±%s",
+            mean_vaf, sd_vaf), "\n")
+```
+
+
+S2A:
+
+
+```{r, echo = TRUE}
+alteration_type <- c()
+purity <- c()
+
+for (i in variants_final$SAMPLE) {
+  alteration_type <- c(alteration_type, sample_anno$alteration_type[sample_anno$tcga_id == i])
+  purity <- c(purity, sample_anno$purity[sample_anno$tcga_id == i])
+}
+
+
+
+boxplot(variants_final$VAF ~ alteration_type,
+        names = c("Mut", "Mut+CN"),
+        xlab = NULL,
+        ylab = "Variant allele frequency (VAF)",
+        ylim = c(0, 1),
+        col = c("salmon", "darkgreen"),
+        main = "Pan-cancer")
+
+stripchart(variants_final$VAF ~ alteration_type,
+           add = TRUE,
+           vertical = TRUE,
+           method = "jitter",
+           pch = 16)
+
+
+```
+```{r, echo = TRUE}
+# Wilcoxon rank sum = Mann-Whitney U test
+mu_p <- round(wilcox.test(variants_final$VAF ~ alteration_type,
+                          alternative = "two.sided",
+                          correct = TRUE)$p.val, 2)
+
+cat(sprintf("Two-sided Mann-Whitney U test with continuity correction p=%s",
+            mu_p), "\n")
+```
+
+
+S2B:
+
+
+```{r, echo = TRUE}
+plot(purity,
+     variants_final$VAF,
+     xlab = "Tumor purity",
+     ylab = "Variant allele frequency (VAF)",
+     xlim = c(0, 1),
+     ylim = c(0, 1),
+     col = ifelse(alteration_type == "mutation",
+                  "salmon",
+                  "darkgreen"),
+     pch = 16,
+     main = "Pan-cancer")
+abline(a = 0, b = 1, lty = "dotted", col = "grey")
+
+lm_sum <- round(summary(lm(variants_final$VAF ~ purity))$adj.r.squared, 2)
+
+cat(sprintf("Linear model adjusted r-squared: %s",
+            lm_sum), "\n")
+```
+
+
+> The most highly-altered cancer types for BAP1 are KIRC, CHOL, UVM, MESO, LUSC and HNSC – all with >30% altered samples within their tumor types (Figure 2B and Supplemental Table S3A-S3B).   
+
+```{r, echo = TRUE}
+most_altered <- cohort_anno$Cohort[cohort_anno$Altered / cohort_anno$Cohort.size > 0.3]
+
+cat(sprintf("Cancer types with >30 percent altered samples: %s",
+            paste(most_altered, collapse = ", ")), "\n")
+```
+
+
+### Figure S3
+
+Comparison of BAP1 RNA-level expression by alteration type. Image was finalized in Adobe Illustrator 2021.
+
+
+> In the pan-cancer aggregate, all alteration types resulted in lower RNA-level expression of BAP1 than unaltered samples (Figure S3 and Supplemental Table S3B).
+
+
+```{r, echo = TRUE}
+library(ggplot2)
+
+# Using the subset of data for which we have tumor RNA expression data and were able to call altered/unaltered
+
+sample_subset <- sample_anno[!is.na(sample_anno$alteration_type) & 
+                               !is.na(sample_anno$log2_bap1), ]
+
+ggplot(sample_subset, 
+       aes(x = factor(alteration_type, 
+                      levels = c("unaltered", "copynumber", "mutation+copynumber", "mutation")),
+           y = log2_bap1)) + 
+  ggdist::stat_halfeye(
+    adjust = 0.5,
+    width = 0.6,
+    .width = 0,
+    justification = -0.2,
+    point_colour = NA,
+    show.legend = F
+) +
+  geom_boxplot(outlier.shape = NA, 
+               width = 0.12, 
+               fill = c("grey", "lightgreen", "darkgreen", "salmon"))
+```
+
+
+```{r, echo = TRUE}
+# Pairwise two-sided Mann-Whitney U test with continuity correction
+pairwise.wilcox.test(sample_subset$log2_bap1,
+                     sample_subset$alteration_type,
+                     p.adjust.method = "bonferroni",
+                     alternative = "two.sided",
+                     correct = TRUE)$p.value
+```
+
+
+## Figure 3 - Cancer type-specific expression signatures
+
+> Of approximately 16,000 expressed protein coding genes tested in this manner, an average of 6% were significantly changed with a range from the lowest of 0.03% in LAML to the highest of 34.6% in UVM. 
+
+
+```{r, echo = TRUE}
+model_summaries <- read.delim("data/table_s4a.txt")
+
+mean_sig <- paste0(round(mean(model_summaries$num_genes_significant, na.rm = TRUE)/16000, 2) * 100, "%")
+
+laml_sig <- paste0(round(model_summaries$num_genes_significant[model_summaries$Cohort == "TCGA-LAML"] / model_summaries$num_genes_tested[model_summaries$Cohort == "TCGA-LAML"], 4) * 100, "%")
+
+uvm_sig <- paste0(round(model_summaries$num_genes_significant[model_summaries$Cohort == "TCGA-UVM"] / model_summaries$num_genes_tested[model_summaries$Cohort == "TCGA-UVM"], 3) * 100, "%")
+
+cat(sprintf("Mean number of significant protein-coding genes: %s",
+            mean_sig), "\n")
+cat(sprintf("Number of significant protein-coding genes for LAML: %s",
+            laml_sig), "\n")
+cat(sprintf("Number of significant protein-coding genes for UVM: %s",
+            uvm_sig), "\n")
+```
+
+
+### Figure 3A
+
+This is a simple volcano plot of differentially expressed genes between altered and unaltered samples in the UVM cancer type. These differential expression results are from DESeq2 and used Wald testing with shrunken log2 fold changes using apeglm. P-values in DESeq2 are adjusted using the Benjamini-Hochberg procedure. Image was finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE}
+library(EnhancedVolcano)
+
+uvm_res <- read.delim("data/uvm_de_genes.txt")
+
+EnhancedVolcano(uvm_res, 
+                lab = uvm_res$symbol, 
+                x = "log2FoldChange", 
+                y = "padj", 
+                pCutoff = 0.05, 
+                FCcutoff = 0.5, 
+                legendPosition = "right", 
+                legendLabels = c("NS", "Log2 FC", "adj. p-value", "adj. p-value & Log2 FC"),
+                max.overlaps = 30, 
+                labSize = 4.0,
+                selectLab = uvm_res$symbol[abs(uvm_res$log2FoldChange) > 0.5 & 
+                                             uvm_res$padj < 0.05])
+```
+
+
+### Figure 3B
+
+This is a heatmap of differentially expressed genes in UVM. Image was finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE, message = FALSE}
+library(circlize)
+library(nationalparkcolors)
+library(DESeq2)
+library(msigdbr)
+library(ComplexHeatmap)
+library(annotables)
+
+# Set up annotation colors
+col_fun <- colorRamp2(c(-2, 0, 2), c("blue", "white", "red"))
+col_fun2 <- colorRamp2(c(-2, 0, 2), c("blue", "black", "yellow"))
+pal_sm <- as.vector(park_palette("SmokyMountains"))
+pal_rm <- as.vector(park_palette("RockyMountains"))
+pal_purity <- colorRamp2(c(0, 1), c("white", "steelblue"))
+
+# Read in UVM data
+uvm_dds <- readRDS("data/uvm_dds.rds")
+uvm_coldata <- as.data.frame(colData(uvm_dds))
+uvm_mat <- counts(uvm_dds, normalized = TRUE)
+
+# Hallmark pathway genes, with approximate chromosome 3p arm genes filtered out
+hallmark <- msigdbr(species = "human", category = "H")
+chr3p_genes <- unique(grch38$symbol[grch38$chr == "3" & 
+                                      grch38$end < 90600000 & 
+                                      grch38$symbol != "BAP1"])
+apoptosis_genes <- unique(hallmark$ensembl_gene[hallmark$gs_name == "HALLMARK_APOPTOSIS" &
+                                                    !(hallmark$gene_symbol %in% chr3p_genes)])
+dna_repair_genes <- unique(hallmark$ensembl_gene[hallmark$gs_name == "HALLMARK_DNA_REPAIR" &
+                                                     !(hallmark$gene_symbol %in% chr3p_genes)])
+notch_genes <- unique(hallmark$ensembl_gene[hallmark$gs_name == "HALLMARK_NOTCH_SIGNALING" &
+                                                !(hallmark$gene_symbol %in% chr3p_genes)])
+oxphos_genes <- unique(hallmark$ensembl_gene[hallmark$gs_name == "HALLMARK_OXIDATIVE_PHOSPHORYLATION" &
+                                                 !(hallmark$gene_symbol %in% chr3p_genes)])
+emt_genes <- unique(hallmark$ensembl_gene[hallmark$gs_name == "HALLMARK_EPITHELIAL_MESENCHYMAL_TRANSITION" & 
+                                            !(hallmark$gene_symbol %in% chr3p_genes)])
+
+# Subset to statistically significant genes
+uvm_mat <- uvm_mat[rownames(uvm_mat) %in% rownames(uvm_res)[!is.na(uvm_res$padj) & 
+                                                              uvm_res$padj < 0.05], ]
+
+# Median center and log-transform most variably expressed genes for visualization
+uvm_mat_log2 <- log2(uvm_mat + 1)
+uvm_mat_log2_meds <- apply(uvm_mat_log2, 1, median)
+uvm_mat_log2_sds <- apply(uvm_mat_log2, 1, sd)
+uvm_mat_log2_medcenter <- uvm_mat_log2 - uvm_mat_log2_meds
+uvm_mat_log2_medcenter <- uvm_mat_log2_medcenter[uvm_mat_log2_meds > 5 & 
+                                                   uvm_mat_log2_sds > 1.2, ]
+
+# Set sample order so altered come first, then unaltered
+rownames(uvm_coldata) <- uvm_coldata$tcga_id
+uvm_coldata <- uvm_coldata[c(which(uvm_coldata$altered_status == "altered_loss"), which(uvm_coldata$altered_status == "unaltered")), ]
+
+# Relabel histology as subtype
+uvm_coldata <- uvm_coldata[rownames(uvm_coldata) %in% colnames(uvm_mat_log2_medcenter), ]
+colnames(uvm_coldata)[which(colnames(uvm_coldata) == "histology")] <- "subtype"
+
+# Add alteration type data
+alteration_type <- c()
+
+for (i in rownames(uvm_coldata)) {
+  alteration_type <- c(alteration_type, sample_anno$alteration_type[sample_anno$tcga_id == i])
+}
+uvm_coldata$alteration_type <- alteration_type
+
+# Make sure expression samples are in same order as annotations
+uvm_mat_log2_medcenter <- uvm_mat_log2_medcenter[, rownames(uvm_coldata)]
+
+# Translate ENSEMBL IDs to Hugo gene symbols
+genes <- c()
+for (i in rownames(uvm_mat_log2_medcenter)) {
+  genes <- c(genes, grch38$symbol[grch38$ensgene == i][1])
+}
+
+rownames(uvm_mat_log2_medcenter) <- genes
+
+# Remove genes on chromosome 3p 
+uvm_mat_log2_medcenter <- uvm_mat_log2_medcenter[!(rownames(uvm_mat_log2_medcenter) %in% chr3p_genes) & !duplicated(rownames(uvm_mat_log2_medcenter)), ]
+
+# Add BAP1 signature data
+uvm_bap1_signature <- c()
+for (i in uvm_coldata$tcga_id) {
+  uvm_bap1_signature <- c(uvm_bap1_signature, 
+                          sample_anno$bap1_signature_zscore[sample_anno$tcga_id == i])
+}
+uvm_coldata$bap1_signature <- uvm_bap1_signature
+
+# Reordering for visualization
+uvm_coldata_altered <- uvm_coldata[uvm_coldata$altered_status == "altered_loss", ]
+uvm_coldata_unaltered <- uvm_coldata[uvm_coldata$altered_status == "unaltered", ]
+uvm_coldata_altered <- uvm_coldata_altered[order(uvm_coldata_altered$bap1_signature, 
+                                                 decreasing = FALSE), ]
+uvm_coldata_unaltered <- uvm_coldata_unaltered[order(uvm_coldata_unaltered$bap1_signature,
+                                                     decreasing = TRUE), ]
+
+uvm_coldata <- rbind(uvm_coldata_altered, uvm_coldata_unaltered)
+
+# Instead of variably expressed genes, now we specifically look at genes from hallmark sets
+uvm_hallmark_mat <- counts(uvm_dds, normalized = TRUE)
+uvm_hallmark_mat <- uvm_hallmark_mat[, uvm_coldata$tcga_id]
+uvm_mat_log2_medcenter <- uvm_mat_log2_medcenter[, uvm_coldata$tcga_id]
+
+# Compute z-scores to summarize expression of genes in each gene set
+score_fun <- function(counts_mat, gene_subset, coldata) {
+  mat <- counts_mat[gene_subset[gene_subset %in% rownames(counts_mat)], ]
+  mat <- log2(mat + 1)
+  mat_meds <- apply(mat, 1, median)
+  mat_medcenter <- mat - mat_meds
+  mat_medcenter <- mat_medcenter[, rownames(coldata)]
+  out_scores <- apply(mat_medcenter, 2, sum)
+  out_scores <- (out_scores - mean(out_scores)) / sd(out_scores)
+  return(out_scores)
+}
+
+apoptosis_scores <- score_fun(uvm_hallmark_mat, apoptosis_genes, uvm_coldata)
+dna_repair_scores <- score_fun(uvm_hallmark_mat, dna_repair_genes, uvm_coldata)
+emt_scores <- score_fun(uvm_hallmark_mat, emt_genes, uvm_coldata)
+notch_scores <- score_fun(uvm_hallmark_mat, notch_genes, uvm_coldata)
+oxphos_scores <- score_fun(uvm_hallmark_mat, oxphos_genes, uvm_coldata)
+  
+
+# Creation of heatmap with annotations
+subtype_sm <- colorRampPalette(pal_sm)(length(levels(as.factor(uvm_coldata$subtype))))
+names(subtype_sm) <- levels(as.factor(uvm_coldata$subtype))
+ha <- HeatmapAnnotation(subtype = uvm_coldata$subtype, purity = uvm_coldata$purity, 
+                        alteration_type = uvm_coldata$alteration_type, 
+                        altered_status = uvm_coldata$altered_status,
+                        col = list(subtype = subtype_sm,
+                                   purity = pal_purity,
+                                   alteration_type = c("copynumber" = "lightgreen", 
+                                                       "mutation" = "salmon",
+                                                       "mutation+copynumber" = "darkgreen",
+                                                       "unaltered" = "grey"),
+                                   altered_status = c("altered_loss" = "salmon", 
+                                                      "unaltered" = "lightblue")))
+
+ha_b <- HeatmapAnnotation(bap1_signature = uvm_coldata$bap1_signature, 
+                            apoptosis_signature = apoptosis_scores,
+                            dna_repair_signature = dna_repair_scores,
+                            emt_signature = emt_scores,
+                            notch_signature = notch_scores,
+                            oxphos_signature = oxphos_scores,
+                            col = list(bap1_signature = col_fun,
+                                       apoptosis_signature = col_fun,
+                                       dna_repair_signature = col_fun,
+                                       emt_signature = col_fun,
+                                       notch_signature = col_fun,
+                                       oxphos_signature = col_fun))
+
+ht <- Heatmap(uvm_mat_log2_medcenter, 
+              cluster_columns = FALSE, 
+              column_split = factor(uvm_coldata$altered_status, 
+                                    levels = c("altered_loss", "unaltered")),
+                top_annotation = ha, bottom_annotation = ha_b, 
+                show_column_names = FALSE, show_row_names = FALSE,
+                clustering_distance_rows = "pearson", clustering_distance_columns ="pearson",
+                col = col_fun2, name = "Expression")
+
+draw(ht)
+```
+
+
+> In UVM, BAP1 alteration signature scores were positively correlated with these geneset scores: apoptosis (Spearman rho=0.65), DNA repair (Spearman rho=0.51), EMT (Spearman rho=0.65), Notch signaling (Spearman rho=0.71) and oxidative phosphorylation (Spearman rho=0.59) (Figure 3B and Supplemental Table S4B).  
+
+
+```{r, echo = TRUE}
+uvm_scores <- read.delim("data/table_s4b.txt")
+
+uvm_coldata <- cbind(uvm_coldata, uvm_scores)
+```
+
+
+```{r, echo = TRUE}
+report_corr <- function(geneset) {
+  geneset <- grep(geneset, colnames(uvm_coldata), value = TRUE)
+  set_cor <- cor(uvm_coldata$bap1_signature, uvm_coldata[[geneset]],
+      use = "complete.obs",
+      method = "spearman")
+  cat(sprintf("UVM spearman correlation for BAP1 and %s scores: %s",
+              geneset, round(set_cor, 2)), "\n")
+}
+
+for (i in c("apoptosis", "dna_repair", "emt", "notch", "oxphos")) {
+  report_corr(i)
+}
+```
+
+
+> 38/40 (95%) BAP1-altered UVM samples had a positive BAP1 alteration signature score
+
+
+```{r, echo = TRUE}
+positive_altered <- sum(sign(uvm_coldata$bap1_signature[uvm_coldata$altered_status == "altered_loss"]) == 1)
+
+uvm_altered <- sum(uvm_coldata$altered_status == "altered_loss")
+
+percent_positive_altered <- paste0(positive_altered / uvm_altered * 100, "%")
+
+cat(sprintf("# BAP1-altered UVM samples with positive scores: %s/%s (%s)",
+            positive_altered, uvm_altered, percent_positive_altered), "\n")
+```
+
+
+### Figure 3C
+
+This is a boxplot showing that UVM BAP1 alteration signature z-scores separate well by alteration status. Image was finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE}
+boxplot(uvm_coldata$bap1_signature ~ factor(uvm_coldata$altered_status,
+                                            levels = c("altered_loss", "unaltered")),
+        outline = FALSE,
+        col = c("salmon", "lightblue"),
+        names = c("Altered", "Unaltered"),
+        xlab = NULL,
+        ylab = "Within-tumor type BAP1 signature z-score")
+
+stripchart(uvm_coldata$bap1_signature ~ factor(uvm_coldata$altered_status,
+                                            levels = c("altered_loss", "unaltered")),
+           vertical = TRUE,
+           add = TRUE,
+           method = "jitter",
+           pch = 16)
+```
+
+
+```{r, echo = TRUE}
+pval_fig3c <- wilcox.test(uvm_coldata$bap1_signature ~ uvm_coldata$altered_status,
+                     alternative = "two.sided",
+                     correct = TRUE)$p.val
+
+cat(sprintf("Two-sided Mann-Whitney U test with continuity correction p=%s",
+            pval_fig3c), "\n")
+```
+
+
+### Figure 3D
+
+This figure shows correlations of BAP1 signature scores derived from differential gene lists within each tumor type to the differential gene list from UVM. Image was finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE}
+cohort_short <- c()
+cohort_corr <- c()
+
+exclude_cohorts <- c("TCGA-DLBC", "TCGA-LAML", "TCGA-READ", "TCGA-THCA")
+for (i in tcga_projects[!(tcga_projects %in% exclude_cohorts)]) {
+  cohort_short <- c(cohort_short, strsplit(i, "-")[[1]][2])
+  
+  i_corr <- cor(sample_anno$bap1_signature_zscore[sample_anno$Cohort == i],
+                sample_anno$uvm_bap1_signature_zscore[sample_anno$Cohort == i],
+                use = "complete.obs",
+                method = "spearman")
+  cohort_corr <- c(cohort_corr, i_corr)
+}
+
+names(cohort_corr) <- cohort_short
+
+barplot(sort(cohort_corr, decreasing = TRUE),
+        las = 2,
+        cex.names = 0.7,
+        ylab = "Spearman correlation",
+        col = tcga_col[names(sort(cohort_corr, decreasing = TRUE))])
+
+abline(h = 0.5, lty = "dotted", col = "grey")
+```
+
+
+> For most cancer types (66%, 19/29), BAP1 alteration scores were positively correlated, suggesting that the scores capture shared variation in gene expression due to BAP1 alteration.
+
+
+```{r, echo = TRUE}
+num_pos_corr <- sum(sign(cohort_corr) == 1)
+num_cohorts <- length(cohort_corr)
+percent_pos_corr <- paste0(round(num_pos_corr / num_cohorts * 100, 0), "%")
+
+cat(sprintf("# cancer types positively correlated with UVM signature: %s/%s (%s)",
+            num_pos_corr, num_cohorts, percent_pos_corr), "\n")
+```
+
+### Figure 3E
+
+This plot shows MSigDB hallmark pathways that were enriched in at least 5 cancer types. Image was finalized in Adobe Illustrator 2021. Particularly of note, we'll need to add another color annotation bar for the circles in the same range where -3 is blue, 0 is white, and 3 is red.
+
+
+```{r, echo = TRUE}
+nes <- read.delim("data/table_s4c.txt")
+pval <- read.delim("data/table_s4d.txt")
+
+rownames(nes) <- nes$geneset
+rownames(pval) <- pval$geneset
+nes <- nes[, -1]
+pval <- pval[, -1]
+
+cohort_corr_gsea <- cohort_corr[names(cohort_corr) %in% colnames(nes)]
+cohort_corr_gsea <- cohort_corr_gsea[colnames(nes)]
+
+ha <- HeatmapAnnotation(uvm_cor = cohort_corr_gsea, 
+                          col = list(uvm_cor = colorRamp2(c(-1, 0, 1), 
+                                                          c("blue", "white", "red"))))
+draw(Heatmap(as.matrix(nes), 
+               bottom_annotation = ha,
+               rect_gp = gpar(type = "none"), 
+               cluster_rows = TRUE, 
+               cluster_columns = TRUE, 
+               show_heatmap_legend = FALSE,
+               width = unit(0.5, "npc"),
+               cell_fun = function(j,i,x,y,width,height,fill) {
+                 grid.circle(x=x,y=y,r=ifelse(pval[i,j] < 0.05, 0.015, 
+                                              ifelse(pval[i,j] < 0.1, 0.01, 0.005)), gp=gpar(fill = colorRamp2(c(-3,0,3), c("blue","white","red"))(nes[i,j]), col = NA))
+               }
+))
+```
+
+
+## Figure 4 - Characterization of BAP1 alterations in liver carcinoma
+
+### Figure 4A
+
+This is a heatmap of differentially expressed genes in LIHC. Image was finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE}
+# Read in LIHC data
+lihc_res <- read.delim("data/lihc_de_genes.txt")
+lihc_dds <- readRDS("data/lihc_dds.rds")
+lihc_coldata <- as.data.frame(colData(lihc_dds))
+lihc_mat <- counts(lihc_dds, normalized = TRUE)
+
+# Subset to statistically significant genes
+lihc_mat <- lihc_mat[rownames(lihc_mat) %in% rownames(lihc_res)[!is.na(lihc_res$padj) & 
+                                                              lihc_res$padj < 0.05], ]
+
+# Median center and log-transform most variably expressed genes for visualization
+lihc_mat_log2 <- log2(lihc_mat + 1)
+lihc_mat_log2_meds <- apply(lihc_mat_log2, 1, median)
+lihc_mat_log2_sds <- apply(lihc_mat_log2, 1, sd)
+lihc_mat_log2_medcenter <- lihc_mat_log2 - lihc_mat_log2_meds
+lihc_mat_log2_medcenter <- lihc_mat_log2_medcenter[lihc_mat_log2_meds > 5 & 
+                                                   lihc_mat_log2_sds > 1.2, ]
+
+# Set sample order so altered come first, then unaltered
+rownames(lihc_coldata) <- lihc_coldata$tcga_id
+lihc_coldata <- lihc_coldata[c(which(lihc_coldata$altered_status == "altered_loss"), which(lihc_coldata$altered_status == "unaltered")), ]
+
+# Add alteration type data
+alteration_type <- c()
+
+for (i in rownames(lihc_coldata)) {
+  alteration_type <- c(alteration_type, sample_anno$alteration_type[sample_anno$tcga_id == i])
+}
+lihc_coldata$alteration_type <- alteration_type
+
+# Make sure expression samples are in same order as annotations
+lihc_mat_log2_medcenter <- lihc_mat_log2_medcenter[, rownames(lihc_coldata)]
+
+# Translate ENSEMBL IDs to Hugo gene symbols
+genes <- c()
+for (i in rownames(lihc_mat_log2_medcenter)) {
+  genes <- c(genes, grch38$symbol[grch38$ensgene == i][1])
+}
+
+rownames(lihc_mat_log2_medcenter) <- genes
+
+# Remove genes on chromosome 3p 
+lihc_mat_log2_medcenter <- lihc_mat_log2_medcenter[!(rownames(lihc_mat_log2_medcenter) %in% chr3p_genes) & !duplicated(rownames(lihc_mat_log2_medcenter)), ]
+
+# Add BAP1 signature data
+lihc_bap1_signature <- c()
+for (i in lihc_coldata$tcga_id) {
+  lihc_bap1_signature <- c(lihc_bap1_signature, 
+                          sample_anno$bap1_signature_zscore[sample_anno$tcga_id == i])
+}
+lihc_coldata$bap1_signature <- lihc_bap1_signature
+
+# Reordering for visualization
+lihc_coldata_altered <- lihc_coldata[lihc_coldata$altered_status == "altered_loss", ]
+lihc_coldata_unaltered <- lihc_coldata[lihc_coldata$altered_status == "unaltered", ]
+lihc_coldata_altered <- lihc_coldata_altered[order(lihc_coldata_altered$bap1_signature, 
+                                                 decreasing = FALSE), ]
+lihc_coldata_unaltered <- lihc_coldata_unaltered[order(lihc_coldata_unaltered$bap1_signature,
+                                                     decreasing = TRUE), ]
+
+lihc_coldata <- rbind(lihc_coldata_altered, lihc_coldata_unaltered)
+
+# Instead of variably expressed genes, now we specifically look at genes from hallmark sets
+lihc_hallmark_mat <- counts(lihc_dds, normalized = TRUE)
+lihc_hallmark_mat <- lihc_hallmark_mat[, lihc_coldata$tcga_id]
+lihc_mat_log2_medcenter <- lihc_mat_log2_medcenter[, lihc_coldata$tcga_id]
+
+# Compute z-scores to summarize expression of genes in each gene set
+apoptosis_scores <- score_fun(lihc_hallmark_mat, apoptosis_genes, lihc_coldata)
+dna_repair_scores <- score_fun(lihc_hallmark_mat, dna_repair_genes, lihc_coldata)
+emt_scores <- score_fun(lihc_hallmark_mat, emt_genes, lihc_coldata)
+notch_scores <- score_fun(lihc_hallmark_mat, notch_genes, lihc_coldata)
+oxphos_scores <- score_fun(lihc_hallmark_mat, oxphos_genes, lihc_coldata)
+  
+# Creation of heatmap with annotations
+subtype_sm <- colorRampPalette(pal_sm)(length(levels(as.factor(lihc_coldata$subtype))))
+names(subtype_sm) <- levels(as.factor(lihc_coldata$subtype))
+ha <- HeatmapAnnotation(subtype = lihc_coldata$subtype, purity = lihc_coldata$purity, 
+                        alteration_type = lihc_coldata$alteration_type, 
+                        altered_status = lihc_coldata$altered_status,
+                        col = list(subtype = subtype_sm,
+                                   purity = pal_purity,
+                                   alteration_type = c("copynumber" = "lightgreen", 
+                                                       "mutation" = "salmon",
+                                                       "mutation+copynumber" = "darkgreen",
+                                                       "unaltered" = "grey"),
+                                   altered_status = c("altered_loss" = "salmon", 
+                                                      "unaltered" = "lightblue")))
+
+ha_b <- HeatmapAnnotation(bap1_signature = lihc_coldata$bap1_signature, 
+                            apoptosis_signature = apoptosis_scores,
+                            dna_repair_signature = dna_repair_scores,
+                            emt_signature = emt_scores,
+                            notch_signature = notch_scores,
+                            oxphos_signature = oxphos_scores,
+                            col = list(bap1_signature = col_fun,
+                                       apoptosis_signature = col_fun,
+                                       dna_repair_signature = col_fun,
+                                       emt_signature = col_fun,
+                                       notch_signature = col_fun,
+                                       oxphos_signature = col_fun))
+
+ht <- Heatmap(lihc_mat_log2_medcenter, 
+              cluster_columns = FALSE, 
+              column_split = factor(lihc_coldata$altered_status, 
+                                    levels = c("altered_loss", "unaltered")),
+                top_annotation = ha, bottom_annotation = ha_b, 
+                show_column_names = FALSE, show_row_names = FALSE,
+                clustering_distance_rows = "pearson", clustering_distance_columns ="pearson",
+                col = col_fun2, name = "Expression")
+
+draw(ht)
+```
+
+
+> Similar to UVM, BAP1-altered samples in LIHC were positively correlated with apoptosis (Spearman rho=0.23), EMT (Spearman rho=0.44), and Notch signaling (Spearman rho=0.43) (Supplemental Table S5A). 
+
+
+```{r, echo = TRUE}
+lihc_chol_scores <- read.delim("data/table_s5a.txt")
+lihc_scores <- lihc_chol_scores[lihc_chol_scores$Cohort == "LIHC", ]
+lihc_bap1_scores <- c()
+for (i in lihc_scores$tcga_id) {
+  lihc_bap1_scores <- c(lihc_bap1_scores, 
+                        sample_anno$bap1_signature_zscore[sample_anno$tcga_id == i])
+}
+lihc_scores$bap1_score <- lihc_bap1_scores
+
+report_corr <- function(geneset) {
+  geneset <- grep(geneset, colnames(lihc_scores), value = TRUE)
+  set_cor <- cor(lihc_scores$bap1_score, lihc_scores[[geneset]],
+      use = "complete.obs",
+      method = "spearman")
+  cat(sprintf("LIHC spearman correlation for BAP1 and %s scores: %s",
+              geneset, round(set_cor, 2)), "\n")
+}
+
+for (i in c("apoptosis", "dna_repair", "emt", "notch", "oxphos")) {
+  report_corr(i)
+}
+```
+
+
+> These two molecular subtypes were also observed among the unaltered samples (77/330, 23.3%)
+
+
+"These" subtypes refer to blast-like and cholangiocarcinoma-like.
+
+
+```{r, echo = TRUE}
+num_blast_chol <- sum(lihc_coldata$subtype[lihc_coldata$altered_status == "unaltered"] %in%
+                        c("Blast.Like", "CHOL.Like"))
+
+num_unaltered <- sum(lihc_coldata$altered_status == "unaltered")
+
+percent_blast_chol <- paste0(round(num_blast_chol / num_unaltered * 100, 1), "%")
+
+cat(sprintf("# unaltered LIHC samples that are CHOL- or Blast-like: %s/%s (%s)",
+            num_blast_chol, num_unaltered, percent_blast_chol), "\n")
+```
+
+
+### Figure 4B
+
+This is a boxplot showing differences in BAP1 alteration signature scores by liver tumor subtype. Image was finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE}
+boxplot(lihc_coldata$bap1_signature ~ factor(lihc_coldata$subtype,
+                                             levels = c("Liver.Like", 
+                                                        "Blast.Like", 
+                                                        "CHOL.Like")),
+        ylab = "BAP1 alteration signature score",
+        xlab = NULL,
+        col = c("gray29", "coral", "darkgreen"),
+        outline = FALSE)
+
+stripchart(lihc_coldata$bap1_signature ~ factor(lihc_coldata$subtype,
+                                             levels = c("Liver.Like", 
+                                                        "Blast.Like", 
+                                                        "CHOL.Like")),
+           vertical = TRUE,
+           add = TRUE,
+           method = "jitter",
+           pch = 16)
+```
+
+
+```{r, echo = TRUE}
+# Pairwise two-sided Mann-Whitney U test with continuity correction and Bonferroni adjustment
+pairwise.wilcox.test(lihc_coldata$bap1_signature,
+                     lihc_coldata$subtype,
+                     p.adjust.method = "bonferroni",
+                     alternative = "two.sided",
+                     correct = TRUE)$p.value
+```
+
+
+### Figure 4C
+
+This is a plot of gene set enrichment results between BAP1 altered and unaltered LIHC tumors using the MSigDB C8 single cell signatures gene sets. Image was finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE}
+# Pre-filtered list of enriched gene sets with padj < 0.05
+lihc_c8 <- read.delim("data/table_s5b.txt")
+
+ggplot(rbind(head(lihc_c8, n = 5), 
+             tail(lihc_c8, n = 5)), 
+       aes(reorder(pathway, NES))) + 
+  geom_bar(stat = "identity", 
+           aes(fill = Enrichment, y = NES)) + 
+  coord_flip() + 
+  scale_fill_manual(values = setNames(c("firebrick2", "dodgerblue2"),
+                                      c("Up-regulated", "Down-regulated"))) + 
+  geom_hline(yintercept = 0) + 
+  labs(x="Pathway", y="Normalized Enrichment Score") + theme_minimal()
+```
+
+
+### Figure 4D
+
+Here we further explore specific bileduct genesets in the C8 collection and create a boxplot separated by BAP1 altered and unaltered status. We also include cholangiocarcinoma samples to compare.
+
+
+```{r, echo = TRUE}
+c8 <- msigdbr(species = "human", category = "C8")
+bileduct_1 <- unique(c8$ensembl_gene[grepl("BILE_DUCT_CELLS_1", c8$gs_name) &
+                       !(c8$gene_symbol %in% chr3p_genes)])
+bileduct_2 <- unique(c8$ensembl_gene[grepl("BILE_DUCT_CELLS_2", c8$gs_name) &
+                                      !(c8$gene_symbol %in% chr3p_genes)])
+bileduct_3 <- unique(c8$ensembl_gene[grepl("BILE_DUCT_CELLS_3", c8$gs_name) &
+                                      !(c8$gene_symbol %in% chr3p_genes)])
+bileduct_4 <- unique(c8$ensembl_gene[grepl("BILE_DUCT_CELLS_4", c8$gs_name) &
+                                      !(c8$gene_symbol %in% chr3p_genes)])
+
+# Combine unique genes from each bileduct gene set for an overall signature
+bileduct_core_genes <- intersect(bileduct_1, bileduct_2)
+bileduct_core_genes <- intersect(bileduct_core_genes, bileduct_3)
+bileduct_core_genes <- intersect(bileduct_core_genes, bileduct_4)
+
+# We also bring in CHOL samples for comparison
+chol_dds <- readRDS("data/chol_dds.rds")
+
+# Subset to bileduct core genes and combine datasets
+mat_chol <- counts(chol_dds, normalized = TRUE)
+mat_lihc <- counts(lihc_dds, normalized = TRUE)
+mat_chol <- mat_chol[bileduct_core_genes[bileduct_core_genes %in% rownames(mat_chol)], ]
+mat_lihc <- mat_lihc[bileduct_core_genes[bileduct_core_genes %in% rownames(mat_lihc)], ]
+bileduct_mat <- cbind(mat_chol, mat_lihc)
+
+# Compute bileduct z-scores
+bileduct_log2 <- log2(bileduct_mat + 1)
+bileduct_meds <- apply(bileduct_log2, 1, median)
+bileduct_medcenter <- bileduct_log2 - bileduct_meds
+bileduct_scores <- apply(bileduct_medcenter, 2, sum)
+bileduct_scores <- (bileduct_scores - mean(bileduct_scores)) / sd(bileduct_scores)
+
+combined_altered <- c(paste0("CHOL_", chol_dds$altered_status), 
+                      paste0("LIHC_", lihc_dds$altered_status))
+
+boxplot(bileduct_scores ~ combined_altered,
+        col = c("blue", "lightblue", "red", "salmon"),
+        outline = FALSE, xlab = NULL, las = 2, cex.names = 0.7,
+        ylab = "Bile duct signature score",
+        names = c("CHOL altered", "CHOL unaltered",
+                  "LIHC altered", "LIHC unaltered"))
+
+stripchart(bileduct_scores ~ combined_altered,
+           add = TRUE, vertical = TRUE, method = "jitter", pch = 16)
+```
+
+
+> We used CHOL samples as a comparison and observed that LIHC samples with BAP1 alterations were enriched for bile duct markers relative to unaltered samples (Figure 4D and Supplemental Table S5A, pairwise two-sided Mann-Whitney U test with continuity correction and Bonferroni adjusted p=3.7e-4). 
+
+
+```{r, echo = TRUE}
+# Pairwise two-sided Mann-Whitney U test with continuity correction
+pairwise.wilcox.test(bileduct_scores,
+                     combined_altered,
+                     p.adjust.method = "bonferroni",
+                     alternative = "two.sided",
+                     correct = TRUE)$p.value
+```
+
+
+### Figure 4E
+
+This is a scatterplot of BAP1 signature score vs. bile duct signature score for LIHC tumors. Image was finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE}
+lihc_bileduct_scores <- bileduct_scores[!grepl("CHOL", combined_altered)]
+
+lihc_bap1_scores <- c()
+for (i in lihc_dds$tcga_id) {
+  lihc_bap1_scores <- c(lihc_bap1_scores, 
+                        sample_anno$bap1_signature_zscore[sample_anno$tcga_id == i])
+}
+
+plot(lihc_bap1_scores, 
+     lihc_bileduct_scores,
+     xlab = "BAP1 signature score",
+     ylab = "Bile duct signature score",
+     pch = 16,
+     col = ifelse(lihc_dds$altered_status == "altered_loss",
+                    "red", "black"))
+
+abline(a = 0, b = 1, lty = "dotted", col = "grey")
+```
+
+
+> Further, bile duct signature scores in LIHC tumors had a small positive correlation to BAP1 alteration signature scores (Figure 4E and Supplemental Table S5A, linear regression Wherry adjusted r2=0.26  ), suggesting that the signature captures expression of some genes that separate cholangiocyte and hepatocyte identity. 
+
+
+```{r, echo = TRUE}
+lihc_adj_rsq <- summary(lm(lihc_bap1_scores ~ lihc_bileduct_scores))$adj.r
+
+lihc_adj_rsq <- round(lihc_adj_rsq, 2)
+
+cat(sprintf("Linear regression of BAP1 and bileduct signature scores with Wherry adjustment: %s", lihc_adj_rsq), "\n")
+```
+
+
+## Figure 5 - Differential survival stratified by BAP1 alteration scores
+
+
+> In univariate models, positive scores were associated with worse progression-free survival outcomes in four tumor types: UVM (hazard ratio HR=13.64, p=5.1e-4), KIRP (HR=5.2, p=1.8e-4), BLCA (HR=1.8, p=0.022), PAAD (HR=1.83, p=0.019), and improved outcomes in KIRC (HR=0.4, p=1.9e-3) (Figure 5A and Table S6A). 
+
+
+```{r, echo = TRUE}
+surv_univariate <- read.delim("data/table_s6a.txt")
+rownames(surv_univariate) <- surv_univariate$cohort
+
+surv_univariate[c("TCGA-UVM", "TCGA-KIRP", "TCGA-BLCA", "TCGA-PAAD", "TCGA-KIRC"),
+                c("hr", "bap1_p")]
+```
+
+
+### Figure 5A
+
+This is a plot showing Cox proportional hazards univariate model hazard ratios with their associated 95% confidence intervals. Image was finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE}
+# Conver to short-form cancer type IDs
+short_ids <- c()
+for (i in rownames(surv_univariate)) {
+  short_ids <- c(short_ids, strsplit(i, "-", fixed = TRUE)[[1]][2])
+}
+rownames(surv_univariate) <- short_ids
+surv_univariate <- surv_univariate[order(surv_univariate$hr, decreasing = TRUE), ]
+
+# Plot log-transformed hazard ratios as points and confidence intervals as lines
+plot(log(surv_univariate$hr), 
+     c(1:nrow(surv_univariate)),
+     pch = 16, 
+     xlab = "log(Hazard Ratio)", 
+     ylab = NA, 
+     xlim = c(min(log(surv_univariate$lower95))-1, 
+              max(log(surv_univariate$upper95))+1),
+     axes = FALSE)
+axis(1, at = c(-3:max(surv_univariate$upper95+1)))
+axis(2, at = c(1:nrow(surv_univariate)), labels = rownames(surv_univariate), las = 2)
+
+for (i in 1:nrow(surv_univariate)) {
+  segments(x0 = log(surv_univariate[i, "lower95"]), y0 = i,
+           x1 = log(surv_univariate[i, "upper95"]), y1 = i,
+           col = ifelse(surv_univariate$hr[i] > 1 & surv_univariate$bap1_p[i] < 0.05, "red",
+                        ifelse(surv_univariate$hr[i] < 1 & 
+                                 surv_univariate$bap1_p[i] < 0.05, "blue",
+                               "grey")), lwd = 2)
+}
+
+points(log(surv_univariate$hr), c(1:nrow(surv_univariate)), pch = 16)
+abline(v = 0, lty = "dotted")
+```
+
+
+### Figure 5B
+
+This is a series of Kaplan-Meier progression-free survival plots for UVM, BLCA, PAAD, and KIRP. ggsurvfit default p-value reporting uses the logrank test. Images were finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE}
+library(survival)
+library(ggsurvfit)
+
+# Load TCGA curated survival data
+cdr_survival <- read.delim("data/tcga_cdr_survival.txt")
+rownames(cdr_survival) <- cdr_survival$bcr_patient_barcode
+
+# Remove missing data and late-stage disease
+cdr_survival <- cdr_survival[!(cdr_survival$ajcc_pathologic_tumor_stage %in% 
+                                 c("[Discrepancy]", "[Not Applicable]", "[Not Available]",
+                                   "[Unknown]", "Stage X", "Stage IV", "Stage IVA", 
+                                   "Stage IVB", "Stage IVC")), ]
+
+# Reclassify low and high stage tumors
+cdr_survival$ajcc_pathologic_tumor_stage[cdr_survival$ajcc_pathologic_tumor_stage %in% 
+                                           c("I/II NOS", "IS", "Stage 0", "Stage I", 
+                                             "Stage IA", "Stage IB", "Stage II", 
+                                             "Stage IIA", "Stage IIB", "Stage IIC")] <- 
+  "Low stage"
+cdr_survival$ajcc_pathologic_tumor_stage[cdr_survival$ajcc_pathologic_tumor_stage != 
+                                           "Low stage"] <- "High stage"
+
+# Remove other missing data
+cdr_survival$last_contact_days_to[cdr_survival$last_contact_days_to == "#N/A"] <- NA
+cdr_survival$last_contact_days_to <- as.numeric(cdr_survival$last_contact_days_to)
+```
+
+
+```{r, echo = TRUE}
+plotSurvival <- function(cohort) {
+  cohort_short <- strsplit(cohort, "-")[[1]][2]
+  
+  coldata <- sample_anno[sample_anno$Cohort == cohort, 
+                         c("tcga_id", "bap1_signature_zscore")]
+  rownames(coldata) <- coldata$tcga_id
+  coldata <- coldata[!is.na(coldata$bap1_signature_zscore), ]
+  
+  cohort_survival <- cdr_survival[cdr_survival$type == cohort_short, ]
+  cohort_survival <- cohort_survival[!cohort_survival$PFI.time == "#N/A", ]
+  
+  cohort_contact_median <- median(cohort_survival$last_contact_days_to, na.rm = TRUE)
+  cohort_survival$PFI[as.numeric(cohort_survival$PFI.time) > cohort_contact_median &
+                        cohort_survival$PFI == 1] <- 0
+  cohort_survival$PFI.time[as.numeric(cohort_survival$PFI.time) > cohort_contact_median] <-
+    cohort_contact_median
+  
+  rownames(cohort_survival) <- cohort_survival$bcr_patient_barcode
+  cohort_ids <- intersect(rownames(cohort_survival), rownames(coldata))
+  coldata <- coldata[cohort_ids, ]
+  cohort_survival <- cohort_survival[cohort_ids, ]
+  
+  Y <- Surv(as.numeric(cohort_survival$PFI.time), cohort_survival$PFI == 1)
+  sigs <- ifelse(coldata$bap1_signature_zscore < 0, 
+               "Negative signature Score", "Positive signature score")
+  
+  p <- survfit2(Y ~ sigs) %>% ggsurvfit() + 
+        labs(x = "Time (days)", y = "Progression-Free Interval (PFI)") + 
+        add_confidence_interval() + 
+        add_risktable() + 
+        add_censor_mark() + 
+        add_pvalue(location = "annotation") +
+    coord_cartesian(ylim = c(0, 1))
+  
+  print(p)
+}
+```
+
+
+```{r, echo = TRUE}
+plotSurvival("TCGA-UVM")
+```
+
+
+```{r, echo = TRUE}
+plotSurvival("TCGA-BLCA")
+```
+
+
+```{r, echo = TRUE}
+plotSurvival("TCGA-PAAD")
+```
+
+
+```{r, echo = TRUE}
+plotSurvival("TCGA-KIRP")
+```
+
+
+## Figure 6 - Characterization of BAP1 mutation-driven alterations
+
+
+> Of altered tumors, KIRC was almost entirely driven by copy number loss (99%) and alteration status was associated with improved outcomes. 
+
+
+```{r, echo = TRUE}
+num_kirc_cn <- sum(grepl("copynumber", 
+                         sample_anno$alteration_type[sample_anno$Cohort == "TCGA-KIRC"]),
+                   na.rm = TRUE)
+num_kirc_altered <- sum(sample_anno$altered_status[sample_anno$Cohort == "TCGA-KIRC"] ==
+                          "altered_loss", na.rm = TRUE)
+
+percent_kirc_altered_cn <- paste0(round(num_kirc_cn / num_kirc_altered * 100, 0), "%")
+
+cat(sprintf("Percent BAP1 altered KIRC that have CN loss: %s",
+            percent_kirc_altered_cn), "\n")
+```
+
+
+### Figure 6A
+
+This is a combined 5-cancer type heatmap of genes differentially expressed between mutant samples (Mut-only or Mut+CN loss) and CN loss-only samples, ordered by mutation signature scores. Image was finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE}
+library(mclust)
+
+# Read in combined expression, annotation, and DE results data
+combined_dds <- readRDS("data/cohort5_dds.rds")
+coldata <- as.data.frame(colData(combined_dds))
+res <- read.delim("data/cohort5_de_genes.txt")
+res <- res[!is.na(res$padj), ]
+
+# Remove non-significant genes and transform for visualization
+mat <- counts(combined_dds, normalized = TRUE)
+mat <- mat[rownames(mat) %in% rownames(res)[!is.na(res$padj) & res$padj < 0.05], ]
+mat_log2 <- log2(mat + 1)
+mat_log2_meds <- apply(mat_log2, 1, median)
+mat_log2_sds <- apply(mat_log2, 1, sd)
+mat_log2_medcenter <- mat_log2 - mat_log2_meds
+mat_log2_medcenter <- mat_log2_medcenter[mat_log2_meds > 5 & mat_log2_sds > 1.2, ]
+
+# Retain samples we have tumor RNA data for
+rownames(coldata) <- coldata$tcga_id
+coldata <- coldata[rownames(coldata) %in% colnames(mat_log2_medcenter), ]
+
+# Add in alteration type information
+alteration_type <- c()
+for (i in rownames(coldata)) {
+  alteration_type <- c(alteration_type,
+                       sample_anno$alteration_type[sample_anno$tcga_id == i])
+}
+coldata$alteration_type <- alteration_type
+
+# Set RNA expression sample order to be the same as annotations
+mat_log2_medcenter <- mat_log2_medcenter[, rownames(coldata)]
+
+# Convert ENSEMBL gene IDs to Hugo symbols
+genes <- c()
+for (i in rownames(mat_log2_medcenter)) {
+  genes <- c(genes, grch38$symbol[grch38$ensgene == i][1])
+}
+
+rownames(mat_log2_medcenter) <- genes
+
+# Filter chromosome 3p arm genes
+mat_log2_medcenter <- mat_log2_medcenter[!(rownames(mat_log2_medcenter) %in% chr3p_genes) &
+                                           !duplicated(rownames(mat_log2_medcenter)), ]
+
+# Separate gene IDs by significant up and downregulated
+combined_up_genes <- rownames(mat_log2_medcenter)[rownames(mat_log2_medcenter) %in%
+                                                    res$symbol[res$padj < 0.05 &
+                                                                 sign(res$log2FoldChange) ==
+                                                                 "1"]]
+combined_down_genes <- rownames(mat_log2_medcenter)[rownames(mat_log2_medcenter) %in%
+                                                      res$symbol[res$padj < 0.05 &
+                                                                   sign(res$log2FoldChange) ==
+                                                                   "-1"]]
+
+# Compute mutation scores
+score_up <- colSums(mat_log2_medcenter[combined_up_genes, ])
+score_down <- colSums(mat_log2_medcenter[combined_down_genes, ])
+combined_scores <- score_up - score_down
+
+# Use mclust to identify whether there are multiple distributions and, if there are,
+# assign thresholds for classification
+BIC <- mclustBIC(combined_scores)
+mod1 <- Mclust(combined_scores, x = BIC)
+coldata$mut_score <- combined_scores
+coldata$mut_class <- mod1$classification
+
+# Set order of samples by mutation score values
+coldata <- coldata[order(coldata$mut_score, decreasing = FALSE), ]
+mat_log2_medcenter <- mat_log2_medcenter[, rownames(coldata)]
+
+# Make heatmap
+col_fun <- colorRamp2(c(min(coldata$mut_score), 
+                        mean(max(coldata$mut_score[coldata$mut_class == 1]),
+                             min(coldata$mut_score[coldata$mut_class == 2])),
+                        max(coldata$mut_score)), 
+                      c("blue", "white", "red"))
+
+ha <- HeatmapAnnotation(cancer_type = coldata$project, purity = coldata$purity, 
+                          alteration_type = coldata$alteration_type,
+                          col = list(cancer_type = tcga_col[names(tcga_col) %in%
+                                                              coldata$project],
+                                     purity = pal_purity,
+                                     alteration_type = c("copynumber" = "lightgreen", 
+                                                         "mutation" = "salmon",
+                                                         "mutation+copynumber" = "darkgreen",
+                                                         "unaltered" = "grey")))
+
+ha_b <- HeatmapAnnotation(mut_score = coldata$mut_score, 
+                          mut_status = coldata$mut_class,
+                          col = list(mut_score = col_fun,
+                                     mut_status = c("1" = "grey", "2" = "salmon")))
+ht <- Heatmap(mat_log2_medcenter, 
+              top_annotation = ha, 
+              bottom_annotation = ha_b, 
+              show_column_names = FALSE, 
+              show_row_names = FALSE,
+              clustering_distance_rows = "pearson", 
+              cluster_columns = FALSE,
+              col = col_fun2, name = "Expression")
+draw(ht)
+```
+
+
+> Of 136 samples classified as mutation signature positive (score value >=237), 80 were CN, 32 were CN+Mut, and 24 were Mut (Table S6). 
+
+
+```{r, echo = TRUE}
+# min_score gives the minimum mutation score value to be considered class "2", which we call
+# positive, meaning that such samples have relatively high mutation scores
+# min_score <- round(min(coldata$mut_score[coldata$mut_class == 2]), 0)
+
+num_mutpos <- sum(coldata$mut_class == 2)
+num_mutpos_mut <- sum(coldata$alteration_type[coldata$mut_class == 2] == "mutation")
+num_mutpos_cn <- sum(coldata$alteration_type[coldata$mut_class == 2] == "copynumber")
+num_mutpos_mutcn <- sum(coldata$alteration_type[coldata$mut_class == 2] ==
+                          "mutation+copynumber")
+
+cat(sprintf("# samples with positive mutation signatures: %s",
+            num_mutpos), "\n")
+cat(sprintf("# mutation signature positive samples that have a mutation: %s",
+            num_mutpos_mut), "\n")
+cat(sprintf("# mutation signature positive samples that have CN loss: %s",
+            num_mutpos_cn), "\n")
+cat(sprintf("# mutation signature positive samples that have a mutation and CN loss: %s",
+            num_mutpos_mutcn), "\n")
+```
+
+
+> Mutation signature positive samples were enriched for samples that had a mutation (56/136, 41%) and were molecularly distinct compared to their mutation signature negative counterparts which were predominantly samples with copy number alterations (254/257, 99%). 
+
+
+```{r, echo = TRUE}
+num_mutpos_allmut <- num_mutpos_mut + num_mutpos_mutcn
+percent_mutpos_allmut <- paste0(round(num_mutpos_allmut / num_mutpos * 100, 0), "%")
+
+num_mutneg_cn <- sum(coldata$alteration_type[coldata$mut_class == 1] == "copynumber")
+num_mutneg <- sum(coldata$mut_class == 1)
+percent_mutneg_cn <- paste0(round(num_mutneg_cn / num_mutneg * 100, 0), "%")
+
+cat(sprintf("# mutation signature positive samples with mutation: %s/%s (%s)",
+            num_mutpos_allmut, num_mutpos, percent_mutpos_allmut), "\n")
+cat(sprintf("# mutation signature negative samples with CN loss: %s/%s (%s)",
+            num_mutneg_cn, num_mutneg, percent_mutneg_cn), "\n")
+```
+
+
+### Figure 6B
+
+This is a heatmap of the exact same genes identified in the above 5-cancer type analysis of mutant versus CN loss samples, but this time using all KIRC only samples (including altered and unaltered). The goal here is to show that the mutation signature score/gene set performs well in separating mutant samples from non-mutant samples. Image was finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE}
+gene_order <- read.delim("data/gene_order.txt")
+kirc_dds <- readRDS("data/kirc_dds.rds")
+kirc_coldata <- as.data.frame(colData(kirc_dds))
+rownames(kirc_coldata) <- kirc_coldata$tcga_id
+for (i in kirc_coldata$tcga_id) {
+  kirc_coldata$alteration_type[kirc_coldata$tcga_id == i] <-
+    sample_anno$alteration_type[sample_anno$tcga_id == i]
+  kirc_coldata$mut_score[kirc_coldata$tcga_id == i] <-
+    sample_anno$bap1_mutation_score[sample_anno$tcga_id == i]
+  kirc_coldata$mut_class[kirc_coldata$tcga_id == i] <-
+    sample_anno$bap1_mutation_class[sample_anno$tcga_id == i]
+}
+
+kirc_coldata <- kirc_coldata[order(kirc_coldata$mut_score), ]
+kirc_mat <- counts(kirc_dds, normalized = TRUE)
+
+kirc_mat_log2 <- log2(kirc_mat + 1)
+kirc_meds <- apply(kirc_mat_log2, 1, median)
+kirc_log2_medcenter <- kirc_mat_log2 - kirc_meds
+kirc_log2_medcenter <- kirc_log2_medcenter[gene_order$x, rownames(kirc_coldata)]
+
+col_fun <- colorRamp2(c(min(kirc_coldata$mut_score),
+                        mean(max(kirc_coldata$mut_score[kirc_coldata$mut_class == "Negative"]),
+                             min(kirc_coldata$mut_score[kirc_coldata$mut_class == "Positive"])),
+                        max(kirc_coldata$mut_score)), c("blue", "white", "red"))
+
+subtype_sm <- colorRampPalette(pal_sm)(length(levels(as.factor(kirc_coldata$mrna_cluster))))
+names(subtype_sm) <- levels(as.factor(kirc_coldata$mrna_cluster))
+
+ha <- HeatmapAnnotation(subtype = kirc_coldata$mrna_cluster, 
+                        purity = kirc_coldata$purity,
+                        alteration_type = kirc_coldata$alteration_type,
+                        col = list(subtype = subtype_sm,
+                                   purity = pal_purity,
+                                   alteration_type = c("copynumber" = "lightgreen", 
+                                                       "mutation" = "salmon",
+                                                       "mutation+copynumber" = "darkgreen",
+                                                       "unaltered" = "grey")))
+
+ha_b <- HeatmapAnnotation(mut_score = kirc_coldata$mut_score, 
+                          mut_status = kirc_coldata$mut_class,
+                          col = list(mut_score = col_fun,
+                                     mut_status = c("Negative" = "grey", 
+                                                    "Positive" = "salmon")))
+
+ht <- Heatmap(as.matrix(kirc_log2_medcenter), 
+              top_annotation = ha, 
+              bottom_annotation = ha_b, 
+              show_column_names = FALSE, 
+              show_row_names = FALSE, 
+              cluster_columns = FALSE, 
+              cluster_rows = FALSE,
+              col = col_fun2, 
+              name = "Expression")
+
+draw(ht)
+```
+
+
+> The gene expression pattern differences between mutation signature positive (score value >=139) and negative samples is less apparent but still separates those samples that carry  mutations (13/13 positive mutant samples versus 64/323 CN samples, Figure 6B). 
+
+
+```{r, echo = TRUE}
+# min_score gives the minimum mutation score value to be considered class "2", which we call
+# positive, meaning that such samples have relatively high mutation scores
+# min_score <- round(min(sample_anno$bap1_mutation_score[sample_anno$bap1_mutation_class == "Positive" & sample_anno$Cohort == "TCGA-KIRC"]), 0)
+
+num_kirc_mut <- sum(grepl("mutation", sample_anno$alteration_type[sample_anno$Cohort ==
+                                                                    "TCGA-KIRC"]), na.rm = TRUE)
+num_kirc_mutpos_mut <- sum(grepl("mutation", sample_anno$alteration_type[sample_anno$Cohort ==
+                                                                    "TCGA-KIRC"]) &
+                             sample_anno$bap1_mutation_class[sample_anno$Cohort == "TCGA-KIRC"]
+                           == "Positive", na.rm = TRUE)
+num_kirc_cn <- sum(sample_anno$alteration_type[sample_anno$Cohort == "TCGA-KIRC"] ==
+                     "copynumber", na.rm = TRUE)
+num_kirc_mutpos_cn <- sum(sample_anno$alteration_type[sample_anno$Cohort == "TCGA-KIRC"] ==
+                             "copynumber" & sample_anno$bap1_mutation_class[sample_anno$Cohort
+                                                                            == "TCGA-KIRC"]
+                           == "Positive", na.rm = TRUE)
+
+cat(sprintf("# mutant KIRC samples with positive mutation signatures: %s/%s",
+            num_kirc_mutpos_mut, num_kirc_mut), "\n")
+cat(sprintf("# CN loss KIRC samples with positive mutation signatures: %s/%s",
+            num_kirc_mutpos_cn, num_kirc_cn), "\n")
+```
+
+
+### Figure 6C
+
+This plots the distributions of BAP1 mutation scores for KIRC across alteration types, but merging mutation-only samples with mutation+copynumber samples. Image was finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE}
+kirc_anno <- sample_anno[sample_anno$Cohort == "TCGA-KIRC", ]
+kirc_anno$alteration_type[kirc_anno$alteration_type == "mutation+copynumber"] <- "mutation"
+kirc_anno <- kirc_anno[!is.na(kirc_anno$alteration_type), ]
+
+ggplot(kirc_anno, 
+       aes(x = factor(alteration_type, 
+                      levels = c("unaltered", "copynumber", "mutation")),
+           y = bap1_mutation_score)) + 
+  ggdist::stat_halfeye(
+    adjust = 0.5,
+    width = 0.6,
+    .width = 0,
+    justification = -0.2,
+    point_colour = NA,
+    show.legend = F
+) +
+  geom_boxplot(outlier.shape = NA, 
+               width = 0.12, 
+               fill = c("grey", "lightgreen", "salmon"))
+```
+
+
+
+```{r, echo = TRUE}
+# Two-sided Mann-Whitney U test with continuity correction
+wilcox.test(kirc_anno$bap1_mutation_score[kirc_anno$alteration_type == "copynumber"],
+            kirc_anno$bap1_mutation_score[kirc_anno$alteration_type == "mutation"],
+            alternative = "two.sided",
+            correct = TRUE)
+```
+
+
+### Figure 6D
+
+This plots significantly enriched hallmark gene sets for KIRC mutation-driven tumors versus copy number-driven tumors. Image was finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE}
+kirc_mut_hallmark <- read.delim("data/table_s7b.txt")
+kirc_mut_hallmark$pathway <- gsub("HALLMARK_", "", kirc_mut_hallmark$pathway)
+
+ggplot(rbind(head(kirc_mut_hallmark, n = 6), 
+             tail(kirc_mut_hallmark, n = 6)), 
+       aes(reorder(pathway, NES))) + 
+  geom_bar(stat = "identity", 
+           aes(fill = Enrichment, y = NES)) + 
+  coord_flip() + 
+  scale_fill_manual(values = setNames(c("firebrick2", "dodgerblue2"),
+                                      c("Up-regulated", "Down-regulated"))) + 
+  geom_hline(yintercept = 0) + 
+  labs(x="Pathway", y="Normalized Enrichment Score") + theme_minimal()
+```
+
+
+### Figure 6E
+
+This is a Kaplan-Meier progression-free survival plot for KIRC, using stratification by BAP1 mutation classification (positive or negative BAP1 mutation signature score). Image was finalized in Adobe Illustrator 2021.
+
+
+```{r, echo = TRUE}
+# Here we use a modified plotSurvival function from above, substituting BAP1 mutation
+# classification (positive vs negative)
+plotSurvival <- function(cohort) {
+  cohort_short <- strsplit(cohort, "-")[[1]][2]
+  
+  coldata <- sample_anno[sample_anno$Cohort == cohort, 
+                         c("tcga_id", "bap1_mutation_class")]
+  rownames(coldata) <- coldata$tcga_id
+  coldata <- coldata[!is.na(coldata$bap1_mutation_class), ]
+  
+  cohort_survival <- cdr_survival[cdr_survival$type == cohort_short, ]
+  cohort_survival <- cohort_survival[!cohort_survival$PFI.time == "#N/A", ]
+  
+  cohort_contact_median <- median(cohort_survival$last_contact_days_to, na.rm = TRUE)
+  cohort_survival$PFI[as.numeric(cohort_survival$PFI.time) > cohort_contact_median &
+                        cohort_survival$PFI == 1] <- 0
+  cohort_survival$PFI.time[as.numeric(cohort_survival$PFI.time) > cohort_contact_median] <-
+    cohort_contact_median
+  
+  rownames(cohort_survival) <- cohort_survival$bcr_patient_barcode
+  cohort_ids <- intersect(rownames(cohort_survival), rownames(coldata))
+  coldata <- coldata[cohort_ids, ]
+  cohort_survival <- cohort_survival[cohort_ids, ]
+  
+  Y <- Surv(as.numeric(cohort_survival$PFI.time), cohort_survival$PFI == 1)
+  
+  p <- survfit2(Y ~ coldata$bap1_mutation_class) %>% ggsurvfit() + 
+        labs(x = "Time (days)", y = "Progression-Free Interval (PFI)") + 
+        add_confidence_interval() + 
+        add_risktable() + 
+        add_censor_mark() + 
+        add_pvalue(location = "annotation") +
+    coord_cartesian(ylim = c(0, 1))
+  
+  print(p)
+}
+```
+
+
+```{r, echo = TRUE}
+plotSurvival("TCGA-KIRC")
+```
+
+
+Packages used:
+
+
+```{r, echo = TRUE}
+sessionInfo()
+```
